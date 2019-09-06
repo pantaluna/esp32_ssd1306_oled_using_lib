@@ -43,7 +43,7 @@ git commit -m "Updated"
 git config credential.helper store
 git push --set-upstream origin master
 
-git tag --annotate v1.1 --message "Support both 128x32 and 128x64 OLED displays (added to config)"
+git tag --annotate v1.2 --message "More documentation"
 git push origin --tags
 
 git describe --tags --dirt
