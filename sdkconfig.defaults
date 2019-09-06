@@ -11,6 +11,15 @@ CONFIG_STACK_CHECK_ALL=y
 CONFIG_STACK_CHECK=y
 
 #
+# Component => ESP-32 Specific => Minimum Supported ESP32 revision := 1
+#   (default=0)
+CONFIG_ESP32_REV_MIN_0=
+CONFIG_ESP32_REV_MIN_1=y
+CONFIG_ESP32_REV_MIN_2=
+CONFIG_ESP32_REV_MIN_3=
+CONFIG_ESP32_REV_MIN=1
+
+#
 # Component => ESP-32 Specific => Panic Handler Behavior := Print registers and Halt
 #
 CONFIG_ESP32_PANIC_PRINT_HALT=y

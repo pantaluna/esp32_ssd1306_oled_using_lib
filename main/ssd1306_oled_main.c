@@ -12,7 +12,7 @@
 static const char TAG[] = "myapp";
 
 /*
- * KConfig: LED
+ * KConfig: LED, SD1306
  */
 static const int MY_LED_ON_DEVBOARD_GPIO_NUM = CONFIG_MY_LED_ON_DEVBOARD_GPIO_NUM;
 static const int MY_LED_ON_DEVBOARD_WIRING_TYPE = CONFIG_MY_LED_ON_DEVBOARD_WIRING_TYPE;
@@ -68,6 +68,7 @@ void peripheral_task(void *pvParameter) {
     ssd1306_config.i2c_sda_gpio_num = MY_SSD1306_I2C_SDA_GPIO_NUM;
 
     ssd1306_config.oled_dimension = MY_SSD1306_OLED_DIMENSION_NUM;
+    /////ssd1306_config.oled_flip_mode = 1; /*!< Flip the screen or not. 0: default, the screen is at the right of the pin row. 1: flip it (if you mounted the oled board the other way around). */
 
     f_retval = mjd_ssd1306_init(&ssd1306_config);
     if (f_retval != ESP_OK) {

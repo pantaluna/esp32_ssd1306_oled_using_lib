@@ -31,6 +31,7 @@
 
 
 #include "cJSON.h"
+#include "driver/gpio.h"
 #include "driver/i2c.h"
 #include "driver/rmt.h"
 #include "driver/uart.h"
@@ -66,7 +67,6 @@ extern "C" {
 #define MJD_ERR_IO                  (0x110)
 
 #define MJD_ERR_ESP_GPIO            (0x201)
-#define MJD_ERR_ESP_I2C             (0x202)
 #define MJD_ERR_ESP_RMT             (0x203)
 #define MJD_ERR_ESP_RTOS            (0x204)
 #define MJD_ERR_ESP_SNTP            (0x205)
@@ -97,14 +97,27 @@ int mjd_compare_ints(const void * a, const void * b);
 
 /**********
  * BYTES/WORDS and BINARY REPRESENTATION
+ *
+ * @doc Packed BCD = 4 bits per digit. This encodes two decimal digits within a single byte by taking advantage of the fact that four bits are enough to represent the range 0 to 9.
+ * @doc https://en.wikipedia.org/wiki/Binary-coded_decimal
+ *
  */
 #define MJD_HIBYTE(x) ((uint8_t)((uint16_t)(x) >> 8))
 #define MJD_LOBYTE(x) ((uint8_t)(x))
 #define MJD_HIWORD(x) ((uint16_t)((uint32_t)(x) >> 16))
 #define MJD_LOWORD(x) ((uint16_t)((uint32_t)(x)))
 
+/*
+ * Convert uint8_t to binary coded decimal
+ */
 uint8_t mjd_byte_to_bcd(uint8_t val);
+
+/*
+ * Convert binary coded decimal to uint8_t
+ * @doc 4 bits for each decimal digit.
+ */
 uint8_t mjd_bcd_to_byte(uint8_t val);
+
 esp_err_t mjd_byte_to_binary_string(uint8_t input_byte, char * output_string);
 esp_err_t mjd_word_to_binary_string(uint16_t input_word, char * output_string);
 
@@ -156,11 +169,34 @@ esp_err_t mjd_crypto_xor_cipher(const uint8_t param_key, uint8_t* param_ptr_valu
 #define SECONDS_PER_DAY               86400
 #define SECONDS_FROM_1970_TO_2000 946684800
 
+/*
+ * @brief Enforce a delay in milliseconds
+ *
+ *  @param param_millisec delay in ms
+ *
+ *  @important For small delays (<= 500 millisec) use ets_delay_us(). This is a blocking func.
+ *  @important For long delays  (>  500 millisec) use vTaskDelay(). Also avoidd that the CPU Watchdog is triggered (x seconds).
+ *
+ *  @important RTOS func vTaskDelay() is not accurate
+ *                  1. Lowest allowed delay is 10 milliseconds;
+ *                  2. Does not work accurately for values < 500millisec;
+ *
+ */
+void mjd_delay_millisec(uint32_t param_millisec);
+
 uint32_t mjd_seconds_to_milliseconds(uint32_t seconds);
 uint32_t mjd_seconds_to_microseconds(uint32_t seconds);
 void mjd_log_time();
 void mjd_set_timezone_utc();
 void mjd_set_timezone_amsterdam();
+
+/*
+ * @brief
+ *
+ * @example char current_time[20];
+ *          mjd_get_current_time_yyyymmddhhmmss(current_time);
+ *
+ */
 void mjd_get_current_time_yyyymmddhhmmss(char *ptr_buffer);
 
 /**********
@@ -173,6 +209,8 @@ void mjd_get_current_time_yyyymmddhhmmss(char *ptr_buffer);
 
 /**********
  * RTOS vTaskDelay() parameter
+ *
+ * @important Do NOT use vTaskDelay() for time periods smnaller than 10 millisec (use ets_delay_us() instead!)
  */
 #define RTOS_DELAY_0             (0)
 #define RTOS_DELAY_1MILLISEC     (   1 / portTICK_PERIOD_MS)
@@ -180,7 +218,7 @@ void mjd_get_current_time_yyyymmddhhmmss(char *ptr_buffer);
 #define RTOS_DELAY_10MILLISEC    (  10 / portTICK_PERIOD_MS)
 #define RTOS_DELAY_25MILLISEC    (  25 / portTICK_PERIOD_MS)
 #define RTOS_DELAY_50MILLISEC    (  50 / portTICK_PERIOD_MS)
-#define RTOS_DELAY_75MILLISEC    (  50 / portTICK_PERIOD_MS)
+#define RTOS_DELAY_75MILLISEC    (  75 / portTICK_PERIOD_MS)
 #define RTOS_DELAY_100MILLISEC   ( 100 / portTICK_PERIOD_MS)
 #define RTOS_DELAY_125MILLISEC   ( 125 / portTICK_PERIOD_MS)
 #define RTOS_DELAY_150MILLISEC   ( 150 / portTICK_PERIOD_MS)
@@ -191,6 +229,7 @@ void mjd_get_current_time_yyyymmddhhmmss(char *ptr_buffer);
 #define RTOS_DELAY_2SEC          ( 2 * 1000 / portTICK_PERIOD_MS)
 #define RTOS_DELAY_3SEC          ( 3 * 1000 / portTICK_PERIOD_MS)
 #define RTOS_DELAY_5SEC          ( 5 * 1000 / portTICK_PERIOD_MS)
+#define RTOS_DELAY_6SEC          ( 6 * 1000 / portTICK_PERIOD_MS)
 #define RTOS_DELAY_10SEC         (10 * 1000 / portTICK_PERIOD_MS)
 #define RTOS_DELAY_15SEC         (15 * 1000 / portTICK_PERIOD_MS)
 #define RTOS_DELAY_30SEC         (30 * 1000 / portTICK_PERIOD_MS)
@@ -257,22 +296,27 @@ void mjd_log_wakeup_details();
 #define HUZZAH32_GPIO_BITPIN_LED (1ULL<<HUZZAH32_GPIO_NUM_LED)
 
 typedef enum {
-    LED_WIRING_TYPE_DEFAULT = 1, /*!< Default */
-    LED_WIRING_TYPE_DIODE_TO_GND = 1, /*!< Resistor LED-DIODE=> GND (MCU Adafruit Huzzah32) */
-    LED_WIRING_TYPE_DIODE_FROM_VCC = 2, /*!< LED-DIODE<= Resistor VCC (MCU Lolin32Lite) */
+    LED_WIRING_TYPE_LED_LOW_SIDE = 1,  /*!< PCB: GPIO .. Resistor .. LED-DIODE|> .. GND (MCU Adafruit HUZZAH32) */
+    LED_WIRING_TYPE_LED_HIGH_SIDE = 2, /*!< PCB: GPIO .. |<LED-DIODE .. Resistor .. VCC (MCU Lolin32Lite, LOLIN D32) */
 } mjd_led_wiring_type_t;
 
 typedef struct {
-    uint32_t is_initialized; /*!< Helper to know if an element was initialized, or not. Mark 1. */
-    uint64_t gpio_num; /*!< GPIO num pin */
+    uint32_t is_init;                  /*!< Helper to know if an element was initialized, or not. Mark 1. */
+    uint64_t gpio_num;                 /*!< GPIO num pin */
     mjd_led_wiring_type_t wiring_type; /*!< Wiring Type */
 } mjd_led_config_t;
 
-void mjd_led_config(const mjd_led_config_t *led_config);
-void mjd_led_on(int gpio_nr);
-void mjd_led_off(int gpio_nr);
-void mjd_led_blink_times(int gpio_nr, int times);
-void mjd_led_mark_error(int gpio_nr);
+#define MJD_LED_CONFIG_DEFAULT() { \
+    .is_init = false, \
+    .gpio_num = GPIO_NUM_MAX, \
+    .wiring_type = LED_WIRING_TYPE_LED_LOW_SIDE, \
+}
+
+void mjd_led_config(const mjd_led_config_t *param_led_config);
+void mjd_led_on(int param_gpio_nr);
+void mjd_led_off(int param_gpio_nr);
+void mjd_led_blink_times(int param_gpio_nr, int param_count);
+void mjd_led_mark_error(int param_gpio_nr);
 
 #ifdef __cplusplus
 }

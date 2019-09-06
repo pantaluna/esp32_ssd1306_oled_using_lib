@@ -30,9 +30,7 @@ git clone -b v3.2 --recursive https://github.com/espressif/esp-idf.git esp-idf-v
 
 ## Lab Setup / Wiring Diagram
 
-The project will use the I2C protocol to interface between the ESP32 Master and the SSD1306 Slave
-
-.
+The project will use the I2C protocol to interface between the ESP32 Master and the SSD1306 Slave.
 
 ![_doc/Wiring Diagram - Project esp32_ssd1306_oled_using_lib-01.png](C:\myiot\esp\esp32_ssd1306_oled_using_lib\_doc\Wiring Diagram - Project esp32_ssd1306_oled_using_lib-01.png)
 
